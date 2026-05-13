@@ -1,0 +1,28 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "run on android phone",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"run",
+				"-d",
+				"RXCTA04NSST"
+			],
+			"isBackground": true,
+			"problemMatcher": [
+				"$flutter"
+			],
+			"group": "build"
+		},
+		{
+			"label": "flutter run android phone",
+			"type": "shell",
+			"command": "flutter run -d RXCTA04NSST",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

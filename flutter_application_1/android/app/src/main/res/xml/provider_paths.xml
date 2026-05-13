@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Allow sharing files under files/stickers/ -->
+    <files-path name="stickers" path="stickers/" />
+    <!-- Allow sharing files under app_flutter/ (getApplicationDocumentsDirectory) -->
+    <files-path name="app_flutter" path="app_flutter/" />
+    <!-- Expose app data root so FileProvider can serve /data/data/<package>/app_flutter/... -->
+    <root-path name="app_data_root" path="data/data/" />
+</paths>
