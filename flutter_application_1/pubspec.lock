@@ -5,10 +5,10 @@ packages:
     dependency: transitive
     description:
       name: archive
-      sha256: cb6a278ef2dbb298455e1a713bda08524a175630ec643a242c399c932a0a1f7d
+      sha256: a96e8b390886ee8abb49b7bd3ac8df6f451c621619f52a26e815fdcf568959ff
       url: "https://pub.dev"
     source: hosted
-    version: "3.6.1"
+    version: "4.0.9"
   args:
     dependency: transitive
     description:
@@ -260,10 +260,10 @@ packages:
     dependency: "direct main"
     description:
       name: image
-      sha256: "8e9d133755c3e84c73288363e6343157c383a0c6c56fc51afcc5d4d7180306d6"
+      sha256: "13d3349ace88f12f4a0d175eb5c12dcdd39d35c4c109a8a13dfeb6d0bd9e31c3"
       url: "https://pub.dev"
     source: hosted
-    version: "3.3.0"
+    version: "4.5.3"
   image_picker:
     dependency: "direct main"
     description:
@@ -520,6 +520,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
+  posix:
+    dependency: transitive
+    description:
+      name: posix
+      sha256: "185ef7606574f789b40f289c233efa52e96dead518aed988e040a10737febb07"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.5.0"
   pub_semver:
     dependency: transitive
     description:
@@ -621,14 +629,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
-  whatsapp_stickers_plus:
+  whatsapp_stickers_handler:
     dependency: "direct main"
     description:
-      name: whatsapp_stickers_plus
-      sha256: a1f4c717b1d164847d25b3f0e5851356bece59004cec1b3fc216f70dabe0adcf
+      name: whatsapp_stickers_handler
+      sha256: "8df3d69eac058164b008d02d08e3b8643236466f2be37201eb3909646871f6c8"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.1"
+    version: "0.5.0"
   xdg_directories:
     dependency: transitive
     description:

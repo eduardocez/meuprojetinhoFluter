@@ -1,8 +1,10 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
     <application
         android:label="flutter_application_1"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        tools:replace="android:name">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -30,12 +32,6 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-
-        <provider
-            android:name="com.cellest.whatsapp_stickers_plus.StickerContentProvider"
-            android:authorities="${applicationId}.stickercontentprovider"
-            android:exported="true"
-            android:readPermission="com.whatsapp.sticker.READ" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

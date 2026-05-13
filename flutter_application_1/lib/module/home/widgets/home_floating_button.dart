@@ -10,8 +10,8 @@ class HomeFloatingButton extends StatelessWidget {
     return FloatingActionButton.extended(
       backgroundColor: const Color.fromARGB(255, 212, 31, 31),
       onPressed: onPressed,
-      label: const Text('Nova Foto'),
-      icon: const Icon(Icons.add_a_photo_rounded),
+      label: const Text('Novo Pacote'),
+      icon: const Icon(Icons.add_box_rounded),
     );
   }
 }
