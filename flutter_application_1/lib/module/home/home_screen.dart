@@ -30,13 +30,20 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadPacks() async {
     try {
       final packs = await PackStorage.loadPacks();
+      final refreshed = <StickerPackInfo>[];
+      for (final pack in packs) {
+        final updated = await sticker_manager.StickerManager.refreshPackFromDisk(pack);
+        refreshed.add(updated);
+      }
       if (!mounted) return;
       setState(() {
         _packs
           ..clear()
-          ..addAll(packs);
+          ..addAll(refreshed);
         _loadingPacks = false;
       });
+
+      await PackStorage.savePacks(refreshed);
     } catch (e) {
       debugPrint('Erro ao carregar pacotes: $e');
       if (!mounted) return;
@@ -191,7 +198,10 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _packs.insert(0, pack);
       });
-      snack.showSnackBar(const SnackBar(content: Text('Pacote enviado ao WhatsApp')));
+      final message = pack.needsSync
+          ? 'Pacote criado localmente. Falha ao enviar ao WhatsApp.'
+          : 'Pacote enviado ao WhatsApp';
+      snack.showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       snack.showSnackBar(SnackBar(content: Text('Erro: $e')));
     }
@@ -306,7 +316,10 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _packs.insert(0, pack);
       });
-      snack.showSnackBar(const SnackBar(content: Text('Pacote enviado ao WhatsApp')));
+      final message = pack.needsSync
+          ? 'Pacote criado localmente. Falha ao enviar ao WhatsApp.'
+          : 'Pacote enviado ao WhatsApp';
+      snack.showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       snack.showSnackBar(SnackBar(content: Text('Erro: $e')));
     }
@@ -367,10 +380,11 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    final dialogContext = context;
     showDialog<void>(
-      context: context,
+      context: dialogContext,
       barrierDismissible: false,
-      builder: (dialogContext) => const AlertDialog(
+      builder: (_) => const AlertDialog(
         content: Row(
           children: [
             CircularProgressIndicator(),
@@ -383,9 +397,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final updated = await sticker_manager.StickerManager.addStickersToPack(pack, selectedSources);
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
       if (updated == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Nao foi possivel adicionar figurinhas')),
@@ -395,107 +406,273 @@ class _HomeScreenState extends State<HomeScreen> {
       await PackStorage.updatePack(updated);
       if (!mounted) return;
       setState(() {
-        final index = _packs.indexWhere((p) => p.id == updated.id);
-        if (index >= 0) {
-          _packs[index] = updated;
+        final oldIndex = _packs.indexWhere((p) => p.id == pack.id);
+        if (oldIndex >= 0) {
+          _packs[oldIndex] = updated;
+        } else {
+          final newIndex = _packs.indexWhere((p) => p.id == updated.id);
+          if (newIndex >= 0) {
+            _packs[newIndex] = updated;
+          } else {
+            _packs.insert(0, updated);
+          }
         }
       });
       final message = updated.needsSync
           ? 'Pacote salvo localmente. Falha ao enviar ao WhatsApp.'
           : updated.published
               ? 'Pacote atualizado no WhatsApp'
-              : 'Pacote salvo. Adicione mais (min 3) para enviar ao WhatsApp';
+            : 'Pacote salvo localmente.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e')));
+    } finally {
+      if (mounted) {
+        Navigator.of(dialogContext, rootNavigator: true).pop();
+      }
     }
   }
 
   Future<void> _verPacote(BuildContext context, StickerPackInfo pack) async {
+    final refreshed = await sticker_manager.StickerManager.refreshPackFromDisk(pack);
+    if (refreshed.stickers != pack.stickers || refreshed.trayPath != pack.trayPath) {
+      await PackStorage.updatePack(refreshed);
+      if (mounted) {
+        setState(() {
+          final oldIndex = _packs.indexWhere((p) => p.id == pack.id);
+          if (oldIndex >= 0) {
+            _packs[oldIndex] = refreshed;
+          } else {
+            final newIndex = _packs.indexWhere((p) => p.id == refreshed.id);
+            if (newIndex >= 0) {
+              _packs[newIndex] = refreshed;
+            } else {
+              _packs.insert(0, refreshed);
+            }
+          }
+        });
+      }
+      pack = refreshed;
+    }
+
+    var currentPack = pack;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  pack.name,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text('Figurinhas: ${pack.stickers.length}/30'),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 320,
-                  child: pack.stickers.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Nenhuma figurinha ainda',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        )
-                      : GridView.builder(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                          ),
-                          itemCount: pack.stickers.length,
-                          itemBuilder: (context, index) {
-                            final path = pack.stickers[index];
-                            return ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.file(
-                                File(path),
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  color: Colors.black26,
-                                  alignment: Alignment.center,
-                                  child: const Icon(Icons.broken_image_outlined),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                const SizedBox(height: 12),
-                Row(
+        return StatefulBuilder(
+          builder: (modalContext, setModalState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _adicionarAoPacote(context, pack);
-                        },
-                        icon: const Icon(Icons.add_photo_alternate_rounded),
-                        label: const Text('Adicionar figurinhas'),
-                      ),
+                    Text(
+                      currentPack.name,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
+                    const SizedBox(height: 8),
+                    Text('Figurinhas: ${currentPack.stickers.length}/30'),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 320,
+                      child: currentPack.stickers.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Nenhuma figurinha ainda',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
+                          : GridView.builder(
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                              ),
+                              itemCount: currentPack.stickers.length,
+                              itemBuilder: (context, index) {
+                                final path = currentPack.stickers[index];
+                                return Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.file(
+                                        File(path),
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        errorBuilder: (_, __, ___) => Container(
+                                          color: Colors.black26,
+                                          alignment: Alignment.center,
+                                          child: const Icon(Icons.broken_image_outlined),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 4,
+                                      right: 4,
+                                      child: InkWell(
+                                        onTap: () async {
+                                          final confirm = await showDialog<bool>(
+                                            context: modalContext,
+                                            builder: (dialogContext) => AlertDialog(
+                                              title: const Text('Excluir figurinha'),
+                                              content: const Text('Deseja excluir esta figurinha?'),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                                                  child: const Text('Cancelar'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                                                  child: const Text('Excluir'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+
+                                          if (confirm != true) return;
+
+                                          final file = File(path);
+                                          if (await file.exists()) {
+                                            await file.delete();
+                                          }
+
+                                          final updated = currentPack.copyWith(
+                                            stickers: currentPack.stickers.where((p) => p != path).toList(),
+                                            needsSync: true,
+                                          );
+
+                                          await PackStorage.updatePack(updated);
+                                          if (!mounted) return;
+                                          setState(() {
+                                            final index = _packs.indexWhere((p) => p.id == updated.id);
+                                            if (index >= 0) {
+                                              _packs[index] = updated;
+                                            }
+                                          });
+                                          setModalState(() {
+                                            currentPack = updated;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black54,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: const Icon(Icons.close, size: 16, color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              _adicionarAoPacote(context, currentPack);
+                            },
+                            icon: const Icon(Icons.add_photo_alternate_rounded),
+                            label: const Text('Adicionar figurinhas'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final snack = ScaffoldMessenger.of(context);
+                              snack.showSnackBar(
+                                const SnackBar(content: Text('Sincronizando com WhatsApp...')),
+                              );
+
+                              final updated = await sticker_manager.StickerManager.syncPack(currentPack);
+                              if (updated == null) {
+                                snack.showSnackBar(
+                                  const SnackBar(content: Text('Nao foi possivel sincronizar')),
+                                );
+                                return;
+                              }
+                              await PackStorage.updatePack(updated);
+                              if (!mounted) return;
+                              setState(() {
+                                final oldIndex = _packs.indexWhere((p) => p.id == currentPack.id);
+                                if (oldIndex >= 0) {
+                                  _packs[oldIndex] = updated;
+                                } else {
+                                  final newIndex = _packs.indexWhere((p) => p.id == updated.id);
+                                  if (newIndex >= 0) {
+                                    _packs[newIndex] = updated;
+                                  } else {
+                                    _packs.insert(0, updated);
+                                  }
+                                }
+                              });
+                              setModalState(() {
+                                currentPack = updated;
+                              });
+                              snack.showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    updated.needsSync
+                                        ? 'Falha ao enviar ao WhatsApp'
+                                        : 'Pacote sincronizado com WhatsApp',
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.sync_rounded),
+                            label: const Text('Sincronizar'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
                         onPressed: () async {
-                          final snack = ScaffoldMessenger.of(context);
-                          snack.showSnackBar(
-                            const SnackBar(content: Text('Sincronizando com WhatsApp...')),
+                          String novoNome = currentPack.name;
+                          final confirm = await showDialog<bool>(
+                            context: modalContext,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Renomear pacote'),
+                              content: TextField(
+                                decoration: const InputDecoration(
+                                  labelText: 'Nome do pacote',
+                                  border: OutlineInputBorder(),
+                                ),
+                                onChanged: (val) {
+                                  if (val.trim().isNotEmpty) {
+                                    novoNome = val.trim();
+                                  }
+                                },
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                                  child: const Text('Cancelar'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                                  child: const Text('Salvar'),
+                                ),
+                              ],
+                            ),
                           );
 
-                          final updated = await sticker_manager.StickerManager.syncPack(pack);
-                          if (updated == null) {
-                            snack.showSnackBar(
-                              const SnackBar(content: Text('Nao foi possivel sincronizar')),
-                            );
-                            return;
-                          }
+                          if (confirm != true || novoNome.trim().isEmpty) return;
+
+                          final updated = currentPack.copyWith(name: novoNome, needsSync: true);
                           await PackStorage.updatePack(updated);
                           if (!mounted) return;
                           setState(() {
@@ -504,69 +681,63 @@ class _HomeScreenState extends State<HomeScreen> {
                               _packs[index] = updated;
                             }
                           });
-                          snack.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                updated.needsSync
-                                    ? 'Falha ao enviar ao WhatsApp'
-                                    : 'Pacote sincronizado com WhatsApp',
-                              ),
+                          setModalState(() {
+                            currentPack = updated;
+                          });
+                        },
+                        icon: const Icon(Icons.edit_rounded),
+                        label: const Text('Renomear pacote'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: modalContext,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Excluir pacote'),
+                              content: const Text('Tem certeza que deseja excluir este pacote?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                                  child: const Text('Cancelar'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                                  child: const Text('Excluir'),
+                                ),
+                              ],
                             ),
                           );
+
+                          if (confirm != true) return;
+
+                          await PackStorage.removePack(currentPack.id);
+                          if (!mounted) return;
+                          setState(() {
+                            _packs.removeWhere((p) => p.id == currentPack.id);
+                          });
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Pacote excluido')),
+                          );
                         },
-                        icon: const Icon(Icons.sync_rounded),
-                        label: const Text('Sincronizar'),
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        label: const Text(
+                          'Excluir pacote',
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton.icon(
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (dialogContext) => AlertDialog(
-                          title: const Text('Excluir pacote'),
-                          content: const Text('Tem certeza que deseja excluir este pacote?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(dialogContext).pop(false),
-                              child: const Text('Cancelar'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.of(dialogContext).pop(true),
-                              child: const Text('Excluir'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm != true) return;
-
-                      await PackStorage.removePack(pack.id);
-                      if (!mounted) return;
-                      setState(() {
-                        _packs.removeWhere((p) => p.id == pack.id);
-                      });
-                      if (context.mounted) {
-                        Navigator.of(context).pop();
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Pacote excluido')),
-                      );
-                    },
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                    label: const Text(
-                      'Excluir pacote',
-                      style: TextStyle(color: Colors.redAccent),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

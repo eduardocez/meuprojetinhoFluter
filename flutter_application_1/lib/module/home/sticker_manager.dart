@@ -1,16 +1,177 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:image/image.dart' as img;
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
-import 'package:whatsapp_stickers_handler/whatsapp_stickers_handler.dart';
 import 'package:whatsapp_stickers_handler/model/sticker_pack.dart';
+import 'package:whatsapp_stickers_handler/whatsapp_stickers_handler.dart';
 
 import 'sticker_pack_info.dart';
 
 class StickerManager {
+  static Future<bool> _fileExists(String path) async {
+    if (path.trim().isEmpty) {
+      return false;
+    }
+    return File(path).exists();
+  }
+
+  static Future<List<String>> _listStickerFiles(String packId) async {
+    if (packId.trim().isEmpty) {
+      return <String>[];
+    }
+
+    final dir = await getApplicationDocumentsDirectory();
+    final packDir = Directory('${dir.path}/stickers/$packId');
+    if (!await packDir.exists()) {
+      return <String>[];
+    }
+
+    final files = await packDir.list().toList();
+    final stickerFiles = files
+        .whereType<File>()
+        .where((file) {
+          final name = file.path.split('/').last;
+          return name.startsWith('sticker_') && name.endsWith('.webp');
+        })
+        .map((file) => file.path)
+        .toList();
+
+    stickerFiles.sort();
+    return stickerFiles;
+  }
+
+  static Future<List<String>> _listLegacyStickerFiles() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final legacyDir = Directory('${dir.path}/stickers');
+    if (!await legacyDir.exists()) {
+      return <String>[];
+    }
+
+    final files = await legacyDir.list().toList();
+    final stickerFiles = files
+        .whereType<File>()
+        .where((file) {
+          final name = file.path.split('/').last;
+          return name.startsWith('sticker_') && name.endsWith('.webp');
+        })
+        .map((file) => file.path)
+        .toList();
+
+    stickerFiles.sort();
+    return stickerFiles;
+  }
+
+  static Future<StickerPackInfo> _migrateLegacyFiles(StickerPackInfo pack) async {
+    final legacyStickers = await _listLegacyStickerFiles();
+    if (legacyStickers.isEmpty) {
+      return pack;
+    }
+
+    final updated = await _ensurePackId(pack);
+    if (updated.id == pack.id && updated.stickers.isNotEmpty) {
+      return updated;
+    }
+
+    final dir = await getApplicationDocumentsDirectory();
+    final packDir = Directory('${dir.path}/stickers/${updated.id}');
+    if (!await packDir.exists()) {
+      await packDir.create(recursive: true);
+    }
+
+    final movedStickers = <String>[];
+    for (final path in legacyStickers) {
+      final file = File(path);
+      if (!await file.exists()) {
+        continue;
+      }
+      final filename = path.split('/').last;
+      final newPath = '${packDir.path}/$filename';
+      await file.rename(newPath);
+      movedStickers.add(newPath);
+    }
+
+    return updated.copyWith(stickers: movedStickers, needsSync: true);
+  }
+
+  static Future<StickerPackInfo> refreshPackFromDisk(StickerPackInfo pack) async {
+    var refreshed = pack;
+
+    if (refreshed.id.trim().isEmpty) {
+      refreshed = await _migrateLegacyFiles(refreshed);
+      return refreshed;
+    }
+
+    final existing = <String>[];
+    for (final path in refreshed.stickers) {
+      if (await _fileExists(path)) {
+        existing.add(path);
+      }
+    }
+
+    final diskStickers = await _listStickerFiles(refreshed.id);
+    final resolvedStickers = diskStickers.isNotEmpty ? diskStickers : existing;
+
+    if (resolvedStickers.isEmpty) {
+      refreshed = await _migrateLegacyFiles(refreshed);
+      return refreshed;
+    }
+
+    String trayPath = refreshed.trayPath;
+    if (!await _fileExists(trayPath)) {
+      final firstBytes = await File(resolvedStickers.first).readAsBytes();
+      trayPath = await saveTrayIcon(firstBytes, refreshed.id);
+    }
+
+    return refreshed.copyWith(stickers: resolvedStickers, trayPath: trayPath);
+  }
+
+  static Future<StickerPackInfo> _ensurePackId(StickerPackInfo pack) async {
+    if (pack.id.trim().isNotEmpty) {
+      return pack;
+    }
+
+    final newId = 'pack_${DateTime.now().millisecondsSinceEpoch}';
+    final dir = await getApplicationDocumentsDirectory();
+    final packDir = Directory('${dir.path}/stickers/$newId');
+    if (!await packDir.exists()) {
+      await packDir.create(recursive: true);
+    }
+
+    final movedStickers = <String>[];
+    for (final path in pack.stickers) {
+      final file = File(path);
+      if (!await file.exists()) {
+        continue;
+      }
+      final filename = path.split('/').last;
+      final newPath = '${packDir.path}/$filename';
+      await file.rename(newPath);
+      movedStickers.add(newPath);
+    }
+
+    String trayPath = pack.trayPath;
+    if (trayPath.trim().isNotEmpty) {
+      final trayFile = File(trayPath);
+      if (await trayFile.exists()) {
+        final newTrayPath = '${packDir.path}/tray.png';
+        await trayFile.rename(newTrayPath);
+        trayPath = newTrayPath;
+      }
+    }
+
+    return pack.copyWith(
+      id: newId,
+      trayPath: trayPath,
+      stickers: movedStickers,
+      published: false,
+      needsSync: true,
+    );
+  }
+
   static Future<Uint8List> _compressWebpToLimit(Uint8List pngBytes, {int maxBytes = 100000}) async {
     int quality = 90;
     Uint8List result = await FlutterImageCompress.compressWithList(
@@ -70,7 +231,6 @@ class StickerManager {
     return stickerFiles;
   }
 
-  /// Convert [bytes] to WebP 512x512 and save to app files under stickers/<packId>/name.webp
   static Future<String> saveSticker(Uint8List bytes, String packId, String name) async {
     final image = img.decodeImage(bytes);
     if (image == null) {
@@ -78,7 +238,7 @@ class StickerManager {
     }
     final resized = img.copyResizeCropSquare(image, size: 512);
     final png = img.encodePng(resized);
-    
+
     final webp = await _compressWebpToLimit(Uint8List.fromList(png));
 
     final dir = await getApplicationDocumentsDirectory();
@@ -120,7 +280,13 @@ class StickerManager {
     return file.path;
   }
 
-  static Future<void> saveMetadata(String packId, String packName, String publisher, List<String> stickerFiles, String trayFile) async {
+  static Future<void> saveMetadata(
+    String packId,
+    String packName,
+    String publisher,
+    List<String> stickerFiles,
+    String trayFile,
+  ) async {
     final dir = await getApplicationDocumentsDirectory();
     final packDir = Directory('${dir.path}/stickers/$packId');
     if (!await packDir.exists()) {
@@ -163,9 +329,11 @@ class StickerManager {
     throw Exception('Failed to fetch $url');
   }
 
-  /// Create sticker pack from list of image sources (either local file paths or network URLs represented as strings in [sources]).
-  /// [sources] format: if startsWith('http') it'll be fetched; otherwise treated as file path.
-  static Future<StickerPackInfo?> createPackAndAdd(String packId, String packName, List<String> sources) async {
+  static Future<StickerPackInfo?> createPackAndAdd(
+    String packId,
+    String packName,
+    List<String> sources,
+  ) async {
     final stickerFiles = <String>[];
     String? trayFile;
     int i = 0;
@@ -200,28 +368,14 @@ class StickerManager {
       return null;
     }
 
-    // Para o WhatsApp, exigem mínimo de 3 figurinhas no pacote
-    if (stickerFiles.length < 3) {
-      final missing = 3 - stickerFiles.length;
-      debugPrint('⚠️ WhatsApp exige no mínimo 3 figurinhas. Duplicando a primeira figurinha $missing vezes...');
-      final firstStickerFile = File(stickerFiles.first);
-      final firstStickerBytes = await firstStickerFile.readAsBytes();
-      
-      for (int m = 0; m < missing; m++) {
-        final filename = 'sticker_${stickerFiles.length}.webp';
-        final path = await _saveBytesToFile(firstStickerBytes, packId, filename);
-        stickerFiles.add(path);
-      }
-    }
-
     debugPrint('📦 Criando pack com ${stickerFiles.length} figurinhas');
     debugPrint('🎯 Pack ID: $packId');
     debugPrint('📁 Sticker files: $stickerFiles');
-    
+
     await saveMetadata(packId, packName, 'Publisher', stickerFiles, trayFile);
 
     debugPrint('🚀 Enviando para WhatsApp...');
-    
+
     try {
       final handler = WhatsappStickersHandler();
       final stickerPack = StickerPack(
@@ -233,7 +387,7 @@ class StickerManager {
       );
 
       await handler.addStickerPack(stickerPack);
-      
+
       debugPrint('Pacote adicionado ao WhatsApp!');
       return StickerPackInfo(
         id: packId,
@@ -246,7 +400,15 @@ class StickerManager {
       );
     } catch (e) {
       debugPrint('Erro generico: $e');
-      return null;
+      return StickerPackInfo(
+        id: packId,
+        name: packName,
+        trayPath: trayFile,
+        stickers: stickerFiles,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        published: false,
+        needsSync: true,
+      );
     }
   }
 
@@ -256,6 +418,14 @@ class StickerManager {
   ) async {
     if (sources.isEmpty) {
       return null;
+    }
+
+    pack = await _ensurePackId(pack);
+    if (pack.stickers.isEmpty) {
+      final diskStickers = await _listStickerFiles(pack.id);
+      if (diskStickers.isNotEmpty) {
+        pack = pack.copyWith(stickers: diskStickers);
+      }
     }
 
     final remaining = 30 - pack.stickers.length;
@@ -282,27 +452,7 @@ class StickerManager {
     }
 
     final allStickers = [...pack.stickers, ...newStickers];
-
-    if (!pack.published && allStickers.length < 3) {
-      return pack.copyWith(
-        stickers: allStickers,
-        trayPath: trayPath,
-        needsSync: false,
-      );
-    }
-
-    var stickersForPublish = List<String>.from(allStickers);
-    if (stickersForPublish.length < 3) {
-      final missing = 3 - stickersForPublish.length;
-      final firstStickerFile = File(stickersForPublish.first);
-      final firstStickerBytes = await firstStickerFile.readAsBytes();
-      for (int m = 0; m < missing; m++) {
-        final filename = 'sticker_${stickersForPublish.length}.webp';
-        final path = await _saveBytesToFile(firstStickerBytes, pack.id, filename);
-        stickersForPublish.add(path);
-      }
-    }
-
+    final stickersForPublish = List<String>.from(allStickers);
     await saveMetadata(pack.id, pack.name, 'Publisher', stickersForPublish, trayPath);
 
     try {
@@ -338,6 +488,14 @@ class StickerManager {
   }
 
   static Future<StickerPackInfo?> syncPack(StickerPackInfo pack) async {
+    pack = await _ensurePackId(pack);
+    if (pack.stickers.isEmpty) {
+      final diskStickers = await _listStickerFiles(pack.id);
+      if (diskStickers.isNotEmpty) {
+        pack = pack.copyWith(stickers: diskStickers);
+      }
+    }
+
     if (pack.stickers.isEmpty) {
       return null;
     }
@@ -346,10 +504,6 @@ class StickerManager {
     if (trayPath.trim().isEmpty) {
       final firstStickerBytes = await File(pack.stickers.first).readAsBytes();
       trayPath = await saveTrayIcon(firstStickerBytes, pack.id);
-    }
-
-    if (pack.stickers.length < 3) {
-      return pack.copyWith(trayPath: trayPath, needsSync: false);
     }
 
     await saveMetadata(pack.id, pack.name, 'Publisher', pack.stickers, trayPath);
