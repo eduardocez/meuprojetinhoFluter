@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 class BaseAppBar extends AppBar {
-  BaseAppBar({super.key});
+  BaseAppBar({super.key, this.bottom});
+
+  @override
+  final PreferredSizeWidget? bottom;
 
 
   @override
@@ -18,6 +21,7 @@ class _BaseAppBarState extends State<BaseAppBar> {
         'Minhas figurinhas',
         style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2),
       ),
+      bottom: widget.bottom,
     );
   }
 }

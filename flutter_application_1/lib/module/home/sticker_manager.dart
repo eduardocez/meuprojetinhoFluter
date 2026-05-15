@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -242,6 +241,8 @@ class StickerManager {
         trayPath: trayFile,
         stickers: stickerFiles,
         createdAt: DateTime.now().millisecondsSinceEpoch,
+        published: true,
+        needsSync: false,
       );
     } catch (e) {
       debugPrint('Erro generico: $e');
@@ -274,8 +275,35 @@ class StickerManager {
       return null;
     }
 
+    String trayPath = pack.trayPath;
+    if (trayPath.trim().isEmpty && sources.isNotEmpty) {
+      final firstBytes = await _readSourceBytes(sources.first);
+      trayPath = await saveTrayIcon(firstBytes, pack.id);
+    }
+
     final allStickers = [...pack.stickers, ...newStickers];
-    await saveMetadata(pack.id, pack.name, 'Publisher', allStickers, pack.trayPath);
+
+    if (!pack.published && allStickers.length < 3) {
+      return pack.copyWith(
+        stickers: allStickers,
+        trayPath: trayPath,
+        needsSync: false,
+      );
+    }
+
+    var stickersForPublish = List<String>.from(allStickers);
+    if (stickersForPublish.length < 3) {
+      final missing = 3 - stickersForPublish.length;
+      final firstStickerFile = File(stickersForPublish.first);
+      final firstStickerBytes = await firstStickerFile.readAsBytes();
+      for (int m = 0; m < missing; m++) {
+        final filename = 'sticker_${stickersForPublish.length}.webp';
+        final path = await _saveBytesToFile(firstStickerBytes, pack.id, filename);
+        stickersForPublish.add(path);
+      }
+    }
+
+    await saveMetadata(pack.id, pack.name, 'Publisher', stickersForPublish, trayPath);
 
     try {
       final handler = WhatsappStickersHandler();
@@ -283,15 +311,73 @@ class StickerManager {
         identifier: pack.id,
         name: pack.name,
         publisher: 'Publisher',
-        trayImage: pack.trayPath,
-        stickers: allStickers,
+        trayImage: trayPath,
+        stickers: stickersForPublish,
       );
 
-      await handler.updateStickerPack(stickerPack);
-      return pack.copyWith(stickers: allStickers);
+      if (pack.published) {
+        await handler.updateStickerPack(stickerPack);
+      } else {
+        await handler.addStickerPack(stickerPack);
+      }
+
+      return pack.copyWith(
+        stickers: allStickers,
+        trayPath: trayPath,
+        published: true,
+        needsSync: false,
+      );
     } catch (e) {
       debugPrint('Erro generico: $e');
+      return pack.copyWith(
+        stickers: allStickers,
+        trayPath: trayPath,
+        needsSync: true,
+      );
+    }
+  }
+
+  static Future<StickerPackInfo?> syncPack(StickerPackInfo pack) async {
+    if (pack.stickers.isEmpty) {
       return null;
+    }
+
+    String trayPath = pack.trayPath;
+    if (trayPath.trim().isEmpty) {
+      final firstStickerBytes = await File(pack.stickers.first).readAsBytes();
+      trayPath = await saveTrayIcon(firstStickerBytes, pack.id);
+    }
+
+    if (pack.stickers.length < 3) {
+      return pack.copyWith(trayPath: trayPath, needsSync: false);
+    }
+
+    await saveMetadata(pack.id, pack.name, 'Publisher', pack.stickers, trayPath);
+
+    try {
+      final handler = WhatsappStickersHandler();
+      final stickerPack = StickerPack(
+        identifier: pack.id,
+        name: pack.name,
+        publisher: 'Publisher',
+        trayImage: trayPath,
+        stickers: pack.stickers,
+      );
+
+      if (pack.published) {
+        await handler.updateStickerPack(stickerPack);
+      } else {
+        await handler.addStickerPack(stickerPack);
+      }
+
+      return pack.copyWith(
+        trayPath: trayPath,
+        published: true,
+        needsSync: false,
+      );
+    } catch (e) {
+      debugPrint('Erro generico: $e');
+      return pack.copyWith(trayPath: trayPath, needsSync: true);
     }
   }
 }
