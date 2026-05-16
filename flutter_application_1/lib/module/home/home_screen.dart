@@ -745,10 +745,91 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF25D366),
+      brightness: Brightness.dark,
+    );
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'meu app',
-      theme: ThemeData(useMaterial3: true, brightness: Brightness.dark),
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: colorScheme,
+        scaffoldBackgroundColor: colorScheme.surface,
+        appBarTheme: AppBarTheme(
+          backgroundColor: colorScheme.surface,
+          foregroundColor: colorScheme.onSurface,
+          elevation: 0,
+          centerTitle: true,
+          surfaceTintColor: Colors.transparent,
+        ),
+        tabBarTheme: TabBarThemeData(
+          labelColor: colorScheme.primary,
+          unselectedLabelColor: colorScheme.onSurface.withAlpha(170),
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        progressIndicatorTheme: ProgressIndicatorThemeData(
+          color: colorScheme.primary,
+        ),
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: colorScheme.surfaceContainerHighest,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: colorScheme.outlineVariant),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: colorScheme.outlineVariant),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: colorScheme.primary, width: 1.2),
+          ),
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: colorScheme.surfaceContainerHigh,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        ),
+        bottomSheetTheme: BottomSheetThemeData(
+          backgroundColor: colorScheme.surfaceContainerHigh,
+          surfaceTintColor: Colors.transparent,
+          showDragHandle: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: colorScheme.surfaceContainerHighest,
+          contentTextStyle: TextStyle(color: colorScheme.onSurface),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        cardTheme: CardThemeData(
+          color: colorScheme.surfaceContainerHigh,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
       home: DefaultTabController(
         length: 2,
         child: Builder(
@@ -768,9 +849,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Crie suas figurinhas primeiro e depois escolha o pacote.',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
@@ -786,38 +870,41 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: _loadingPacks
                             ? const Center(child: CircularProgressIndicator())
                             : _packs.isEmpty
-                                ? const Center(
+                                ? Center(
                                     child: Text(
                                       'Nenhum pacote criado ainda',
-                                      style: TextStyle(color: Colors.grey),
+                                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                                     ),
                                   )
                                 : ListView.builder(
                                     itemCount: _packs.length,
                                     itemBuilder: (context, index) {
                                       final pack = _packs[index];
-                                      return ListTile(
-                                        leading: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: pack.trayPath.trim().isEmpty
-                                              ? Container(
-                                                  width: 44,
-                                                  height: 44,
-                                                  color: Colors.black26,
-                                                  alignment: Alignment.center,
-                                                  child: const Icon(Icons.collections_rounded),
-                                                )
-                                              : Image.file(
-                                                  File(pack.trayPath),
-                                                  width: 44,
-                                                  height: 44,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined),
-                                                ),
+                                      return Card(
+                                        child: ListTile(
+                                          leading: ClipRRect(
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: pack.trayPath.trim().isEmpty
+                                                ? Container(
+                                                    width: 44,
+                                                    height: 44,
+                                                    color: Colors.black26,
+                                                    alignment: Alignment.center,
+                                                    child: const Icon(Icons.collections_rounded),
+                                                  )
+                                                : Image.file(
+                                                    File(pack.trayPath),
+                                                    width: 44,
+                                                    height: 44,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, __, ___) =>
+                                                        const Icon(Icons.broken_image_outlined),
+                                                  ),
+                                          ),
+                                          title: Text(pack.name),
+                                          subtitle: Text('${pack.stickers.length}/30 figurinhas'),
+                                          onTap: () => _verPacote(context, pack),
                                         ),
-                                        title: Text(pack.name),
-                                        subtitle: Text('${pack.stickers.length}/30 figurinhas'),
-                                        onTap: () => _verPacote(context, pack),
                                       );
                                     },
                                   ),
@@ -835,9 +922,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
+                            Text(
                               'Pacotes',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
+                              ),
                             ),
                             if (!_loadingPacks)
                               ElevatedButton.icon(
@@ -852,10 +943,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: _loadingPacks
                             ? const Center(child: CircularProgressIndicator())
                             : _packs.isEmpty
-                                ? const Center(
+                                ? Center(
                                     child: Text(
                                       'Nenhum pacote criado ainda',
-                                      style: TextStyle(color: Colors.grey),
+                                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                                     ),
                                   )
                                 : GridView.builder(
@@ -873,12 +964,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                         child: Container(
                                           decoration: BoxDecoration(
                                             borderRadius: BorderRadius.circular(16),
-                                            color: const Color(0xFF1E1E1E),
+                                            color: colorScheme.surfaceContainerHigh,
                                             boxShadow: [
                                               BoxShadow(
-                                                color: Colors.black.withOpacity(0.2),
-                                                blurRadius: 6,
-                                                offset: const Offset(0, 4),
+                                                color: Colors.black.withAlpha(51),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 5),
                                               ),
                                             ],
                                           ),
@@ -921,7 +1012,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                         child: Container(
                                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                                           decoration: BoxDecoration(
-                                                            color: Colors.black54,
+                                                            color: Colors.black.withAlpha(140),
                                                             borderRadius: BorderRadius.circular(12),
                                                           ),
                                                           child: Text(
@@ -942,7 +1033,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                                         pack.name,
                                                         maxLines: 1,
                                                         overflow: TextOverflow.ellipsis,
-                                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
                                                       ),
                                                       const SizedBox(height: 8),
                                                       SizedBox(
