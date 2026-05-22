@@ -2,6 +2,10 @@
 
 A new Flutter project.
 
+## Arquitetura
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the reusable project architecture and folder conventions.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

@@ -6,16 +6,14 @@ class BaseAppBar extends AppBar {
   @override
   final PreferredSizeWidget? bottom;
 
-
   @override
   State<BaseAppBar> createState() => _BaseAppBarState();
 }
 
-class _BaseAppBarState extends State<BaseAppBar> { 
-
+class _BaseAppBarState extends State<BaseAppBar> {
   @override
   AppBar build(BuildContext context) {
-    return AppBar(  
+    return AppBar(
       centerTitle: true,
       title: const Text(
         'Minhas figurinhas',

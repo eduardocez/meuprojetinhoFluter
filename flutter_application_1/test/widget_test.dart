@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_application_1/module/home/home_screen.dart';
+import 'package:flutter_application_1/src/app/app.dart';
 
 void main() {
-  testWidgets('Home screen renders', (WidgetTester tester) async {
-    await tester.pumpWidget(const HomeScreen());
+  testWidgets('App renders HomePage shell', (WidgetTester tester) async {
+    await tester.pumpWidget(const StickerApp(loadHomePacks: false));
 
-    expect(find.text('Recentes'), findsOneWidget);
+    expect(find.text('Minhas figurinhas'), findsOneWidget);
   });
 }

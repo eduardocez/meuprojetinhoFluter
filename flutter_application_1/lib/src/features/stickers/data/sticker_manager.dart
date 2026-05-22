@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:whatsapp_stickers_handler/model/sticker_pack.dart';
 import 'package:whatsapp_stickers_handler/whatsapp_stickers_handler.dart';
 
-import 'sticker_pack_info.dart';
+import '../domain/sticker_pack_info.dart';
 
 class StickerManager {
   static Future<bool> _fileExists(String path) async {

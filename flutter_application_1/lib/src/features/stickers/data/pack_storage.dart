@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'sticker_pack_info.dart';
+import '../domain/sticker_pack_info.dart';
 
 class PackStorage {
   static const String _fileName = 'sticker_packs.json';
