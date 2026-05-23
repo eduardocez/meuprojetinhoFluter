@@ -674,249 +674,164 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return DefaultTabController(
-      initialIndex: 1,
-      length: 2,
-      child: Builder(
-        builder: (context) => Scaffold(
-          appBar: BaseAppBar(
-            bottom: const TabBar(
-              tabs: [
-                Tab(text: 'Adicionar Figurinhas'),
-                Tab(text: 'Meus Pacotes'),
-              ],
-            ),
-          ),
-          body: TabBarView(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Crie suas figurinhas primeiro e depois escolha o pacote.',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+    return Scaffold(
+      appBar: BaseAppBar(),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Pacotes',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
                     ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _fluxoAdicionarFigurinhas(context),
-                        icon: const Icon(Icons.add_photo_alternate_rounded),
-                        label: const Text('Selecionar figurinhas'),
-                      ),
+                  ),
+                  if (!_loadingPacks)
+                    ElevatedButton.icon(
+                      onPressed: () => _criarNovoPacote(context),
+                      icon: const Icon(Icons.add_box_rounded),
+                      label: const Text('Novo pacote'),
                     ),
-                    const SizedBox(height: 24),
-                    Expanded(
-                      child: _loadingPacks
-                          ? const Center(child: CircularProgressIndicator())
-                          : _packs.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    'Nenhum pacote criado ainda',
-                                    style: TextStyle(color: colorScheme.onSurfaceVariant),
-                                  ),
-                                )
-                              : ListView.builder(
-                                  itemCount: _packs.length,
-                                  itemBuilder: (context, index) {
-                                    final pack = _packs[index];
-                                    return Card(
-                                      child: ListTile(
-                                        leading: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8),
-                                          child: pack.trayPath.trim().isEmpty
-                                              ? Container(
-                                                  width: 44,
-                                                  height: 44,
-                                                  color: Colors.black26,
-                                                  alignment: Alignment.center,
-                                                  child: const Icon(Icons.collections_rounded),
-                                                )
-                                              : Image.file(
-                                                  File(pack.trayPath),
-                                                  width: 44,
-                                                  height: 44,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (_, __, ___) =>
-                                                      const Icon(Icons.broken_image_outlined),
-                                                ),
-                                        ),
-                                        title: Text(pack.name),
-                                        subtitle: Text('${pack.stickers.length}/30 figurinhas'),
-                                        onTap: () => _verPacote(context, pack),
-                                      ),
-                                    );
-                                  },
-                                ),
-                    ),
-                  ],
-                ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Pacotes',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onSurface,
-                            ),
+            ),
+            Expanded(
+              child: _loadingPacks
+                  ? const Center(child: CircularProgressIndicator())
+                  : _packs.isEmpty
+                      ? Center(
+                          child: Text(
+                            'Nenhum pacote criado ainda',
+                            style: TextStyle(color: colorScheme.onSurfaceVariant),
                           ),
-                          if (!_loadingPacks)
-                            ElevatedButton.icon(
-                              onPressed: () => _criarNovoPacote(context),
-                              icon: const Icon(Icons.add_box_rounded),
-                              label: const Text('Novo pacote'),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: _loadingPacks
-                          ? const Center(child: CircularProgressIndicator())
-                          : _packs.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    'Nenhum pacote criado ainda',
-                                    style: TextStyle(color: colorScheme.onSurfaceVariant),
-                                  ),
-                                )
-                              : GridView.builder(
-                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
-                                    crossAxisSpacing: 12,
-                                    mainAxisSpacing: 12,
-                                    childAspectRatio: 0.9,
-                                  ),
-                                  itemCount: _packs.length,
-                                  itemBuilder: (context, index) {
-                                    final pack = _packs[index];
-                                    return GestureDetector(
-                                      onTap: () => _verPacote(context, pack),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(16),
-                                          color: colorScheme.surfaceContainerHigh,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withAlpha(51),
-                                              blurRadius: 10,
-                                              offset: const Offset(0, 5),
+                        )
+                      : GridView.builder(
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 0.9,
+                          ),
+                          itemCount: _packs.length,
+                          itemBuilder: (context, index) {
+                            final pack = _packs[index];
+                            return GestureDetector(
+                              onTap: () => _verPacote(context, pack),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  color: colorScheme.surfaceContainerHigh,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withAlpha(51),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            pack.trayPath.trim().isEmpty
+                                                ? Container(
+                                                    color: Colors.black26,
+                                                    alignment: Alignment.center,
+                                                    child: const Icon(
+                                                      Icons.collections_rounded,
+                                                      color: Colors.white70,
+                                                      size: 48,
+                                                    ),
+                                                  )
+                                                : Image.file(
+                                                    File(pack.trayPath),
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (context, error, stackTrace) {
+                                                      return Container(
+                                                        color: Colors.black26,
+                                                        alignment: Alignment.center,
+                                                        child: const Icon(
+                                                          Icons.broken_image_outlined,
+                                                          color: Colors.white70,
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                            Positioned(
+                                              top: 8,
+                                              right: 8,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withAlpha(140),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  '${pack.stickers.length}/30',
+                                                  style: const TextStyle(fontSize: 12),
+                                                ),
+                                              ),
                                             ),
                                           ],
                                         ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(16),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: Stack(
-                                                  fit: StackFit.expand,
-                                                  children: [
-                                                    pack.trayPath.trim().isEmpty
-                                                        ? Container(
-                                                            color: Colors.black26,
-                                                            alignment: Alignment.center,
-                                                            child: const Icon(
-                                                              Icons.collections_rounded,
-                                                              color: Colors.white70,
-                                                              size: 48,
-                                                            ),
-                                                          )
-                                                        : Image.file(
-                                                            File(pack.trayPath),
-                                                            fit: BoxFit.cover,
-                                                            errorBuilder: (context, error, stackTrace) {
-                                                              return Container(
-                                                                color: Colors.black26,
-                                                                alignment: Alignment.center,
-                                                                child: const Icon(
-                                                                  Icons.broken_image_outlined,
-                                                                  color: Colors.white70,
-                                                                ),
-                                                              );
-                                                            },
-                                                          ),
-                                                    Positioned(
-                                                      top: 8,
-                                                      right: 8,
-                                                      child: Container(
-                                                        padding: const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4,
-                                                        ),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.black.withAlpha(140),
-                                                          borderRadius: BorderRadius.circular(12),
-                                                        ),
-                                                        child: Text(
-                                                          '${pack.stickers.length}/30',
-                                                          style: const TextStyle(fontSize: 12),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              pack.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
                                               ),
-                                              Padding(
-                                                padding: const EdgeInsets.all(12),
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      pack.name,
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: const TextStyle(
-                                                        fontWeight: FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    SizedBox(
-                                                      width: double.infinity,
-                                                      child: OutlinedButton.icon(
-                                                        onPressed: () => _adicionarAoPacote(context, pack),
-                                                        icon: const Icon(
-                                                          Icons.add_photo_alternate_rounded,
-                                                          size: 18,
-                                                        ),
-                                                        label: const Text('Adicionar'),
-                                                      ),
-                                                    ),
-                                                  ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            SizedBox(
+                                              width: double.infinity,
+                                              child: OutlinedButton.icon(
+                                                onPressed: () => _adicionarAoPacote(context, pack),
+                                                icon: const Icon(
+                                                  Icons.add_photo_alternate_rounded,
+                                                  size: 18,
                                                 ),
+                                                label: const Text('Adicionar'),
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    );
-                                  },
+                                    ],
+                                  ),
                                 ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          floatingActionButton: HomeFloatingButton(
-            onPressed: () => _criarNovoPacote(context),
-          ),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+          ],
         ),
+      ),
+      floatingActionButton: HomeFloatingButton(
+        onPressed: () => _criarNovoPacote(context),
       ),
     );
   }

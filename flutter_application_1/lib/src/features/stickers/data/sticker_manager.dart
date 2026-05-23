@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -16,6 +17,36 @@ class StickerManager {
   static const Duration _whatsAppOperationTimeout = Duration(seconds: 20);
   static const Duration _whatsAppInstalledPollTimeout = Duration(seconds: 15);
   static const Duration _whatsAppInstalledPollInterval = Duration(milliseconds: 500);
+  static const MethodChannel _whatsAppRefreshChannel =
+      MethodChannel('whatsapp_stickers_handler/refresh');
+
+
+  static Future<void> _addOrUpdateAndEnablePack(
+    StickerPack pack, {
+    required bool installedBefore,
+  }) async {
+    try {
+      final method = installedBefore ? 'updateStickerPackAndEnable' : 'addStickerPackAndEnable';
+      await _whatsAppRefreshChannel.invokeMethod<void>(method, {
+        'identifier': pack.identifier,
+        'name': pack.name,
+        'publisher': pack.publisher,
+        'trayImage': pack.trayImage,
+        'stickers': pack.stickers,
+        'animatedStickerPack': pack.animatedStickerPack,
+        'publisherEmail': pack.publisherEmail,
+        'publisherWebsite': pack.publisherWebsite,
+        'privacyPolicyWebsite': pack.privacyPolicyWebsite,
+        'licenseAgreementWebsite': pack.licenseAgreementWebsite,
+        'iosAppStoreLink': pack.iosAppStoreLink,
+        'androidPlayStoreLink': pack.androidPlayStoreLink,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('⚠️ Falha ao enviar pack ao WhatsApp: ${e.message}');
+    } catch (e) {
+      debugPrint('⚠️ Falha ao enviar pack ao WhatsApp: $e');
+    }
+  }
 
   static Future<bool> _waitForPackInstalled(
     WhatsappStickersHandler handler,
@@ -588,9 +619,12 @@ class StickerManager {
           .timeout(const Duration(seconds: 5), onTimeout: () => false);
 
       if (installedBefore) {
-        await handler.updateStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
+        // `updateStickerPack` apenas atualiza a lista exposta pelo ContentProvider.
+        // Para o WhatsApp recarregar o pack (e refletir novas figurinhas),
+        // disparamos o intent ENABLE_STICKER_PACK sem reescrever o storage.
+        await _addOrUpdateAndEnablePack(stickerPack, installedBefore: true);
       } else {
-        await handler.addStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
+        await _addOrUpdateAndEnablePack(stickerPack, installedBefore: false);
       }
 
       final confirmed = installedBefore || await _waitForPackInstalled(handler, pack.id);
@@ -659,9 +693,11 @@ class StickerManager {
           .timeout(const Duration(seconds: 5), onTimeout: () => false);
 
       if (installedBefore) {
-        await handler.updateStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
+        // Mesmo raciocínio do fluxo de adicionar figurinhas: atualizar o provider
+        // não força o WhatsApp a recarregar. Disparar o intent força o refresh.
+        await _addOrUpdateAndEnablePack(stickerPack, installedBefore: true);
       } else {
-        await handler.addStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
+        await _addOrUpdateAndEnablePack(stickerPack, installedBefore: false);
       }
 
       final confirmed = installedBefore || await _waitForPackInstalled(handler, pack.id);
