@@ -17,19 +17,41 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final ImagePicker _imagePicker = ImagePicker();
   final List<StickerPackInfo> _packs = [];
   bool _loadingPacks = true;
 
+  NavigatorState? _blockingDialogNavigator;
+  bool _blockingDialogOpen = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (!widget.loadOnInit) {
       _loadingPacks = false;
       return;
     }
     _loadPacks();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Se o WhatsApp abrir por cima, fechamos o diálogo para não parecer "loading infinito".
+    if ((state == AppLifecycleState.inactive || state == AppLifecycleState.paused) && _blockingDialogOpen) {
+      final nav = _blockingDialogNavigator;
+      if (nav != null && nav.canPop()) {
+        nav.pop();
+      }
+      _blockingDialogOpen = false;
+    }
   }
 
   Future<void> _loadPacks() async {
@@ -210,121 +232,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _fluxoAdicionarFigurinhas(BuildContext context) async {
+    if (_loadingPacks || !mounted) return;
+
+    if (_packs.isEmpty) {
+      await _criarNovoPacote(context);
+      return;
+    }
+
+    final pack = await _selecionarPacote(context);
+    if (pack == null || !mounted) return;
+
     final sources = await _pickImagePaths();
     if (sources.isEmpty || !mounted) return;
 
-    if (_packs.isEmpty) {
-      await _criarNovoPacoteComSources(context, sources);
-      return;
-    }
-
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Adicionar figurinhas em:',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const Icon(Icons.collections_rounded),
-                title: const Text('Pacote existente'),
-                onTap: () => Navigator.of(ctx).pop('existing'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.add_box_rounded),
-                title: const Text('Novo pacote'),
-                onTap: () => Navigator.of(ctx).pop('new'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (action == 'existing') {
-      final pack = await _selecionarPacote(context);
-      if (pack != null && mounted) {
-        await _adicionarAoPacote(context, pack, sources: sources);
-      }
-      return;
-    }
-
-    if (action == 'new' && mounted) {
-      await _criarNovoPacoteComSources(context, sources);
-    }
-  }
-
-  Future<void> _criarNovoPacoteComSources(BuildContext context, List<String> sources) async {
-    String nomePasta = 'Meu Pacote';
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Novo pacote'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Crie um pacote de figurinhas:'),
-            const SizedBox(height: 16),
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Nome da Pasta',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (val) {
-                if (val.trim().isNotEmpty) {
-                  nomePasta = val.trim();
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Criar pacote'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar != true || !mounted) return;
-
-    final snack = ScaffoldMessenger.of(context);
-    snack.showSnackBar(const SnackBar(content: Text('Preparando pacote de figurinhas...')));
-
-    final packId = 'pack_${DateTime.now().millisecondsSinceEpoch}';
-    final packName = nomePasta;
-    try {
-      final pack = await sticker_manager.StickerManager.createPackAndAdd(packId, packName, sources);
-      if (pack == null) {
-        snack.showSnackBar(const SnackBar(content: Text('Falha ao criar pacote')));
-        return;
-      }
-      await PackStorage.addPack(pack);
-      if (!mounted) return;
-      setState(() {
-        _packs.insert(0, pack);
-      });
-      final message = pack.needsSync
-          ? 'Pacote criado localmente. Falha ao enviar ao WhatsApp.'
-          : 'Pacote enviado ao WhatsApp';
-      snack.showSnackBar(SnackBar(content: Text(message)));
-    } catch (e) {
-      snack.showSnackBar(SnackBar(content: Text('Erro: $e')));
-    }
+    await _adicionarAoPacote(context, pack, sources: sources);
   }
 
   Future<StickerPackInfo?> _selecionarPacote(BuildContext context) async {
@@ -382,9 +303,12 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final dialogContext = context;
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    _blockingDialogNavigator = rootNavigator;
+    _blockingDialogOpen = true;
     showDialog<void>(
-      context: dialogContext,
+      context: context,
+      useRootNavigator: true,
       barrierDismissible: false,
       builder: (_) => const AlertDialog(
         content: Row(
@@ -429,9 +353,10 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e')));
     } finally {
-      if (mounted) {
-        Navigator.of(dialogContext, rootNavigator: true).pop();
+      if (_blockingDialogOpen && rootNavigator.canPop()) {
+        rootNavigator.pop();
       }
+      _blockingDialogOpen = false;
     }
   }
 
@@ -750,6 +675,7 @@ class _HomePageState extends State<HomePage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return DefaultTabController(
+      initialIndex: 1,
       length: 2,
       child: Builder(
         builder: (context) => Scaffold(

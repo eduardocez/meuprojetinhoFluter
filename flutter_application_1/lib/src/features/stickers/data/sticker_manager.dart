@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -12,6 +13,78 @@ import 'package:whatsapp_stickers_handler/whatsapp_stickers_handler.dart';
 import '../domain/sticker_pack_info.dart';
 
 class StickerManager {
+  static const Duration _whatsAppOperationTimeout = Duration(seconds: 20);
+  static const Duration _whatsAppInstalledPollTimeout = Duration(seconds: 15);
+  static const Duration _whatsAppInstalledPollInterval = Duration(milliseconds: 500);
+
+  static Future<bool> _waitForPackInstalled(
+    WhatsappStickersHandler handler,
+    String identifier, {
+    Duration timeout = _whatsAppInstalledPollTimeout,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final installed = await handler
+            .isStickerPackInstalled(identifier)
+            .timeout(const Duration(seconds: 5));
+        if (installed) {
+          return true;
+        }
+      } catch (_) {
+        // Ignore intermittent platform errors while polling.
+      }
+      await Future<void>.delayed(_whatsAppInstalledPollInterval);
+    }
+    return false;
+  }
+
+  static Future<void> _ensureMinimumStickerCount({
+    required String packId,
+    required List<String> stickerFiles,
+  }) async {
+    if (stickerFiles.length >= 3) {
+      return;
+    }
+    if (stickerFiles.isEmpty) {
+      return;
+    }
+
+    final firstStickerFile = File(stickerFiles.first);
+    if (!await firstStickerFile.exists()) {
+      return;
+    }
+
+    final firstStickerBytes = await firstStickerFile.readAsBytes();
+    final missing = 3 - stickerFiles.length;
+    var nextIndex = await _nextStickerIndex(packId);
+    for (int i = 0; i < missing; i++) {
+      final filename = 'sticker_$nextIndex.webp';
+      final path = await _saveBytesToFile(firstStickerBytes, packId, filename);
+      stickerFiles.add(path);
+      nextIndex++;
+    }
+  }
+
+  static int? _tryParseStickerIndex(String path) {
+    final name = path.split('/').last;
+    final match = RegExp(r'^sticker_(\d+)\.webp$').firstMatch(name);
+    if (match == null) return null;
+    return int.tryParse(match.group(1) ?? '');
+  }
+
+  static Future<int> _nextStickerIndex(String packId) async {
+    final existing = await _listStickerFiles(packId);
+    var maxIndex = -1;
+    for (final path in existing) {
+      final parsed = _tryParseStickerIndex(path);
+      if (parsed != null && parsed > maxIndex) {
+        maxIndex = parsed;
+      }
+    }
+    return maxIndex + 1;
+  }
+
   static Future<bool> _fileExists(String path) async {
     if (path.trim().isEmpty) {
       return false;
@@ -368,6 +441,9 @@ class StickerManager {
       return null;
     }
 
+    // WhatsApp exige no mínimo 3 figurinhas por pack.
+    await _ensureMinimumStickerCount(packId: packId, stickerFiles: stickerFiles);
+
     debugPrint('📦 Criando pack com ${stickerFiles.length} figurinhas');
     debugPrint('🎯 Pack ID: $packId');
     debugPrint('📁 Sticker files: $stickerFiles');
@@ -378,6 +454,20 @@ class StickerManager {
 
     try {
       final handler = WhatsappStickersHandler();
+      final isInstalled = await handler.isWhatsAppInstalled;
+      if (!isInstalled) {
+        debugPrint('⚠️ WhatsApp não está instalado');
+        return StickerPackInfo(
+          id: packId,
+          name: packName,
+          trayPath: trayFile,
+          stickers: stickerFiles,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          published: false,
+          needsSync: true,
+        );
+      }
+
       final stickerPack = StickerPack(
         identifier: packId,
         name: packName,
@@ -386,17 +476,29 @@ class StickerManager {
         stickers: stickerFiles,
       );
 
-      await handler.addStickerPack(stickerPack);
+      await handler.addStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
 
-      debugPrint('Pacote adicionado ao WhatsApp!');
+      final confirmed = await _waitForPackInstalled(handler, packId);
+      debugPrint(confirmed ? 'Pacote adicionado ao WhatsApp!' : '⚠️ Não foi possível confirmar instalação no WhatsApp');
       return StickerPackInfo(
         id: packId,
         name: packName,
         trayPath: trayFile,
         stickers: stickerFiles,
         createdAt: DateTime.now().millisecondsSinceEpoch,
-        published: true,
-        needsSync: false,
+        published: confirmed,
+        needsSync: !confirmed,
+      );
+    } on TimeoutException catch (e) {
+      debugPrint('⏱️ Timeout ao enviar para WhatsApp: $e');
+      return StickerPackInfo(
+        id: packId,
+        name: packName,
+        trayPath: trayFile,
+        stickers: stickerFiles,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        published: false,
+        needsSync: true,
       );
     } catch (e) {
       debugPrint('Erro generico: $e');
@@ -434,10 +536,11 @@ class StickerManager {
       return null;
     }
 
+    final startIndex = await _nextStickerIndex(pack.id);
     final newStickers = await _createStickerFiles(
       packId: pack.id,
       sources: sources,
-      startIndex: pack.stickers.length,
+      startIndex: startIndex,
       maxCount: remaining,
     );
 
@@ -453,10 +556,24 @@ class StickerManager {
 
     final allStickers = [...pack.stickers, ...newStickers];
     final stickersForPublish = List<String>.from(allStickers);
+
+    // WhatsApp exige no mínimo 3 figurinhas por pack.
+    await _ensureMinimumStickerCount(packId: pack.id, stickerFiles: stickersForPublish);
     await saveMetadata(pack.id, pack.name, 'Publisher', stickersForPublish, trayPath);
 
     try {
       final handler = WhatsappStickersHandler();
+      final isInstalled = await handler.isWhatsAppInstalled;
+      if (!isInstalled) {
+        debugPrint('⚠️ WhatsApp não está instalado');
+        return pack.copyWith(
+          stickers: stickersForPublish,
+          trayPath: trayPath,
+          published: false,
+          needsSync: true,
+        );
+      }
+
       final stickerPack = StickerPack(
         identifier: pack.id,
         name: pack.name,
@@ -465,22 +582,35 @@ class StickerManager {
         stickers: stickersForPublish,
       );
 
-      if (pack.published) {
-        await handler.updateStickerPack(stickerPack);
+      // Se já está instalado no WhatsApp, devemos atualizar (evita abrir tela com botão "Remove").
+      final installedBefore = await handler
+          .isStickerPackInstalled(pack.id)
+          .timeout(const Duration(seconds: 5), onTimeout: () => false);
+
+      if (installedBefore) {
+        await handler.updateStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
       } else {
-        await handler.addStickerPack(stickerPack);
+        await handler.addStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
       }
 
+      final confirmed = installedBefore || await _waitForPackInstalled(handler, pack.id);
       return pack.copyWith(
-        stickers: allStickers,
+        stickers: stickersForPublish,
         trayPath: trayPath,
-        published: true,
-        needsSync: false,
+        published: confirmed,
+        needsSync: !confirmed,
+      );
+    } on TimeoutException catch (e) {
+      debugPrint('⏱️ Timeout ao sincronizar com WhatsApp: $e');
+      return pack.copyWith(
+        stickers: stickersForPublish,
+        trayPath: trayPath,
+        needsSync: true,
       );
     } catch (e) {
       debugPrint('Erro generico: $e');
       return pack.copyWith(
-        stickers: allStickers,
+        stickers: stickersForPublish,
         trayPath: trayPath,
         needsSync: true,
       );
@@ -510,6 +640,12 @@ class StickerManager {
 
     try {
       final handler = WhatsappStickersHandler();
+      final isInstalled = await handler.isWhatsAppInstalled;
+      if (!isInstalled) {
+        debugPrint('⚠️ WhatsApp não está instalado');
+        return pack.copyWith(trayPath: trayPath, published: false, needsSync: true);
+      }
+
       final stickerPack = StickerPack(
         identifier: pack.id,
         name: pack.name,
@@ -518,17 +654,25 @@ class StickerManager {
         stickers: pack.stickers,
       );
 
-      if (pack.published) {
-        await handler.updateStickerPack(stickerPack);
+      final installedBefore = await handler
+          .isStickerPackInstalled(pack.id)
+          .timeout(const Duration(seconds: 5), onTimeout: () => false);
+
+      if (installedBefore) {
+        await handler.updateStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
       } else {
-        await handler.addStickerPack(stickerPack);
+        await handler.addStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
       }
 
+      final confirmed = installedBefore || await _waitForPackInstalled(handler, pack.id);
       return pack.copyWith(
         trayPath: trayPath,
-        published: true,
-        needsSync: false,
+        published: confirmed,
+        needsSync: !confirmed,
       );
+    } on TimeoutException catch (e) {
+      debugPrint('⏱️ Timeout ao sincronizar com WhatsApp: $e');
+      return pack.copyWith(trayPath: trayPath, needsSync: true);
     } catch (e) {
       debugPrint('Erro generico: $e');
       return pack.copyWith(trayPath: trayPath, needsSync: true);
