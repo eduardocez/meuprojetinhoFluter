@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/src/features/stickers/data/pack_storage.dart';
 import 'package:flutter_application_1/src/features/stickers/data/sticker_manager.dart' as sticker_manager;
 import 'package:flutter_application_1/src/features/stickers/domain/sticker_pack_info.dart';
+import 'package:flutter_application_1/src/features/stickers/presentation/editor/sticker_image_editor_page.dart';
 import 'package:flutter_application_1/src/shared/widgets/base_app_bar.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -113,6 +114,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
 
     return pickedImages.map((image) => image.path).where((path) => path.trim().isNotEmpty).toList();
+  }
+
+  Future<List<String>> _editSelectedImages(BuildContext context, List<String> sources) async {
+    if (sources.isEmpty) return <String>[];
+
+    final edited = <String>[];
+    for (var index = 0; index < sources.length; index += 1) {
+      if (!mounted) return <String>[];
+
+      final result = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => StickerImageEditorPage(
+            imagePath: sources[index],
+            imageIndex: index + 1,
+            totalImages: sources.length,
+          ),
+        ),
+      );
+
+      if (result == null) {
+        return <String>[];
+      }
+      edited.add(result);
+    }
+
+    return edited;
   }
 
   Future<void> _criarNovoPacote(BuildContext context) async {
@@ -226,7 +253,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     if (action != 'photos' || !mounted) return;
 
-    final sources = await _pickImagePaths();
+    final pickedSources = await _pickImagePaths();
+    if (pickedSources.isEmpty || !mounted) {
+      return;
+    }
+
+    final sources = await _editSelectedImages(context, pickedSources);
     if (sources.isEmpty || !mounted) {
       return;
     }
@@ -267,10 +299,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final pack = await _selecionarPacote(context);
     if (pack == null || !mounted) return;
 
-    final sources = await _pickImagePaths();
-    if (sources.isEmpty || !mounted) return;
-
-    await _adicionarAoPacote(context, pack, sources: sources);
+    await _adicionarAoPacote(context, pack);
   }
 
   Future<StickerPackInfo?> _selecionarPacote(BuildContext context) async {
@@ -328,6 +357,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
+    final editedSources = await _editSelectedImages(context, selectedSources);
+    if (editedSources.isEmpty || !mounted) {
+      return;
+    }
+
     final rootNavigator = Navigator.of(context, rootNavigator: true);
     _blockingDialogNavigator = rootNavigator;
     _blockingDialogOpen = true;
@@ -347,7 +381,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
 
     try {
-      final updated = await sticker_manager.StickerManager.addStickersToPack(pack, selectedSources);
+      final updated = await sticker_manager.StickerManager.addStickersToPack(pack, editedSources);
       if (updated == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Nao foi possivel adicionar figurinhas')),
