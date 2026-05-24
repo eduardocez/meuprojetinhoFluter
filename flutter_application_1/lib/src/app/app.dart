@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/src/app/theme/app_theme.dart';
-import 'package:flutter_application_1/src/features/stickers/presentation/home_page.dart';
+import 'package:flutter_application_1/src/features/onboarding/presentation/intro_page.dart';
 
 class StickerApp extends StatelessWidget {
   final bool loadHomePacks;
@@ -11,9 +11,9 @@ class StickerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'meu app',
+      title: 'AppDeFigurinhas',
       theme: AppTheme.light(),
-      home: HomePage(loadOnInit: loadHomePacks),
+      home: IntroPage(loadHomePacks: loadHomePacks),
     );
   }
 }
