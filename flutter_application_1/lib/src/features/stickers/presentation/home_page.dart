@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/src/features/stickers/data/pack_storage.dart';
 import 'package:flutter_application_1/src/features/stickers/data/sticker_manager.dart' as sticker_manager;
 import 'package:flutter_application_1/src/features/stickers/domain/sticker_pack_info.dart';
-import 'package:flutter_application_1/src/features/stickers/presentation/widgets/home_floating_button.dart';
 import 'package:flutter_application_1/src/shared/widgets/base_app_bar.dart';
 import 'package:image_picker/image_picker.dart';
+
+enum PackFilter { all, published, pending }
 
 class HomePage extends StatefulWidget {
   final bool loadOnInit;
@@ -20,7 +21,10 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final ImagePicker _imagePicker = ImagePicker();
   final List<StickerPackInfo> _packs = [];
+  final TextEditingController _searchController = TextEditingController();
   bool _loadingPacks = true;
+  String _searchQuery = '';
+  PackFilter _packFilter = PackFilter.all;
 
   NavigatorState? _blockingDialogNavigator;
   bool _blockingDialogOpen = false;
@@ -39,7 +43,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchController.dispose();
     super.dispose();
+  }
+
+  int get _totalStickers => _packs.fold<int>(0, (sum, pack) => sum + pack.stickers.length);
+
+  List<StickerPackInfo> get _visiblePacks {
+    final query = _searchQuery.trim().toLowerCase();
+    return _packs.where((pack) {
+      if (_packFilter == PackFilter.published && !pack.published) return false;
+      if (_packFilter == PackFilter.pending && !pack.needsSync) return false;
+      if (query.isNotEmpty && !pack.name.toLowerCase().contains(query)) return false;
+      return true;
+    }).toList();
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _searchQuery = '';
+      _packFilter = PackFilter.all;
+      _searchController.clear();
+    });
   }
 
   @override
@@ -260,7 +285,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             padding: const EdgeInsets.symmetric(vertical: 8),
             shrinkWrap: true,
             itemCount: _packs.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final pack = _packs[index];
               return ListTile(
@@ -279,7 +304,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           width: 44,
                           height: 44,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined),
+                          errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
                         ),
                 ),
                 title: Text(pack.name),
@@ -431,7 +456,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                         fit: BoxFit.cover,
                                         width: double.infinity,
                                         height: double.infinity,
-                                        errorBuilder: (_, __, ___) => Container(
+                                        errorBuilder: (_, _, _) => Container(
                                           color: Colors.black26,
                                           alignment: Alignment.center,
                                           child: const Icon(Icons.broken_image_outlined),
@@ -670,168 +695,338 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildEmptyState(BuildContext context, {required bool hasFilters}) {
     final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final isEmpty = _packs.isEmpty;
 
-    return Scaffold(
-      appBar: BaseAppBar(),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+    final title = isEmpty ? 'Crie seu primeiro pacote' : 'Nenhum pacote encontrado';
+    final subtitle = isEmpty
+        ? 'Organize suas figurinhas em pacotes modernos e faceis de achar.'
+        : 'Tente ajustar os filtros ou limpar a busca.';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Pacotes',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  if (!_loadingPacks)
-                    ElevatedButton.icon(
-                      onPressed: () => _criarNovoPacote(context),
-                      icon: const Icon(Icons.add_box_rounded),
-                      label: const Text('Novo pacote'),
-                    ),
-                ],
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withAlpha(90),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                size: 36,
+                color: colorScheme.primary,
               ),
             ),
-            Expanded(
-              child: _loadingPacks
-                  ? const Center(child: CircularProgressIndicator())
-                  : _packs.isEmpty
-                      ? Center(
-                          child: Text(
-                            'Nenhum pacote criado ainda',
-                            style: TextStyle(color: colorScheme.onSurfaceVariant),
-                          ),
-                        )
-                      : GridView.builder(
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 0.9,
-                          ),
-                          itemCount: _packs.length,
-                          itemBuilder: (context, index) {
-                            final pack = _packs[index];
-                            return GestureDetector(
-                              onTap: () => _verPacote(context, pack),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  color: colorScheme.surfaceContainerHigh,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withAlpha(51),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 5),
-                                    ),
-                                  ],
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            pack.trayPath.trim().isEmpty
-                                                ? Container(
-                                                    color: Colors.black26,
-                                                    alignment: Alignment.center,
-                                                    child: const Icon(
-                                                      Icons.collections_rounded,
-                                                      color: Colors.white70,
-                                                      size: 48,
-                                                    ),
-                                                  )
-                                                : Image.file(
-                                                    File(pack.trayPath),
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (context, error, stackTrace) {
-                                                      return Container(
-                                                        color: Colors.black26,
-                                                        alignment: Alignment.center,
-                                                        child: const Icon(
-                                                          Icons.broken_image_outlined,
-                                                          color: Colors.white70,
-                                                        ),
-                                                      );
-                                                    },
-                                                  ),
-                                            Positioned(
-                                              top: 8,
-                                              right: 8,
-                                              child: Container(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black.withAlpha(140),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                ),
-                                                child: Text(
-                                                  '${pack.stickers.length}/30',
-                                                  style: const TextStyle(fontSize: 12),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.all(12),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              pack.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            SizedBox(
-                                              width: double.infinity,
-                                              child: OutlinedButton.icon(
-                                                onPressed: () => _adicionarAoPacote(context, pack),
-                                                icon: const Icon(
-                                                  Icons.add_photo_alternate_rounded,
-                                                  size: 18,
-                                                ),
-                                                label: const Text('Adicionar'),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+            ),
+            if (isEmpty) ...[
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _loadingPacks ? null : () => _criarNovoPacote(context),
+                icon: const Icon(Icons.add_box_rounded),
+                label: const Text('Criar primeiro pacote'),
+              ),
+            ] else if (hasFilters) ...[
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _clearFilters,
+                child: const Text('Limpar filtros'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPackCard(BuildContext context, StickerPackInfo pack) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    final statusLabel = pack.needsSync
+        ? 'Pendente'
+        : pack.published
+            ? 'Publicado'
+            : 'Local';
+    final statusColor = pack.needsSync
+        ? colorScheme.error
+        : pack.published
+            ? colorScheme.primary
+            : colorScheme.tertiary;
+
+    final imageWidget = pack.trayPath.trim().isEmpty
+        ? Container(
+            color: colorScheme.surfaceContainerHighest,
+            alignment: Alignment.center,
+            child: Icon(
+              Icons.collections_rounded,
+              color: colorScheme.onSurfaceVariant,
+              size: 48,
+            ),
+          )
+        : Image.file(
+            File(pack.trayPath),
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) {
+              return Container(
+                color: colorScheme.surfaceContainerHighest,
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              );
+            },
+          );
+
+    return Material(
+      color: colorScheme.surface,
+      elevation: 1,
+      shadowColor: Colors.black.withAlpha(18),
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _verPacote(context, pack),
+        child: Stack(
+          children: [
+            Positioned.fill(child: imageWidget),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      colorScheme.surface.withAlpha(230),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              left: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withAlpha(30),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: textTheme.labelSmall?.copyWith(
+                    color: statusColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 12,
+              left: 12,
+              right: 12,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          pack.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                         ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${pack.stickers.length}/30 figurinhas',
+                          style: textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Material(
+                    color: colorScheme.primaryContainer,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      onPressed: () => _adicionarAoPacote(context, pack),
+                      icon: const Icon(Icons.add_rounded),
+                      color: colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: HomeFloatingButton(
-        onPressed: () => _criarNovoPacote(context),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final visiblePacks = _visiblePacks;
+    final hasFilters = _searchQuery.trim().isNotEmpty || _packFilter != PackFilter.all;
+    final hasPacks = _packs.isNotEmpty;
+    final primaryLabel = hasPacks ? 'Adicionar figurinhas' : 'Criar primeiro pacote';
+    final primaryIcon = hasPacks ? Icons.add_photo_alternate_rounded : Icons.add_box_rounded;
+    final VoidCallback? primaryAction = _loadingPacks
+        ? null
+        : () => hasPacks ? _fluxoAdicionarFigurinhas(context) : _criarNovoPacote(context);
+    final VoidCallback? secondaryAction = _loadingPacks ? null : () => _criarNovoPacote(context);
+
+    return Scaffold(
+      appBar: BaseAppBar(),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: colorScheme.outlineVariant.withAlpha(80)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(10),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pacotes',
+                      style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${_packs.length} pacotes · $_totalStickers figurinhas',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: primaryAction,
+                          icon: Icon(primaryIcon),
+                          label: Text(primaryLabel),
+                        ),
+                        if (hasPacks)
+                          OutlinedButton.icon(
+                            onPressed: secondaryAction,
+                            icon: const Icon(Icons.add_box_rounded),
+                            label: const Text('Novo pacote'),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _searchQuery = value),
+                decoration: InputDecoration(
+                  hintText: 'Buscar pacotes',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _searchQuery.trim().isEmpty
+                      ? null
+                      : IconButton(
+                          onPressed: _clearFilters,
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Todos'),
+                          selected: _packFilter == PackFilter.all,
+                          onSelected: (_) => setState(() => _packFilter = PackFilter.all),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Publicados'),
+                          selected: _packFilter == PackFilter.published,
+                          onSelected: (_) => setState(() => _packFilter = PackFilter.published),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Pendentes'),
+                          selected: _packFilter == PackFilter.pending,
+                          onSelected: (_) => setState(() => _packFilter = PackFilter.pending),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasFilters)
+                    TextButton(
+                      onPressed: _clearFilters,
+                      child: const Text('Limpar'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _loadingPacks
+                    ? const Center(child: CircularProgressIndicator())
+                    : visiblePacks.isEmpty
+                        ? _buildEmptyState(context, hasFilters: hasFilters)
+                        : GridView.builder(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 14,
+                              mainAxisSpacing: 14,
+                              childAspectRatio: 0.82,
+                            ),
+                            itemCount: visiblePacks.length,
+                            itemBuilder: (context, index) {
+                              final pack = visiblePacks[index];
+                              return _buildPackCard(context, pack);
+                            },
+                          ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

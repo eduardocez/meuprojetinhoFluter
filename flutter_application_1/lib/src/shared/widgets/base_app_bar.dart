@@ -13,11 +13,17 @@ class BaseAppBar extends AppBar {
 class _BaseAppBarState extends State<BaseAppBar> {
   @override
   AppBar build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return AppBar(
-      centerTitle: true,
-      title: const Text(
-        'Minhas figurinhas',
-        style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2),
+      centerTitle: false,
+      titleSpacing: 20,
+      title: Text(
+        'Figurinhas',
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+          color: colorScheme.onSurface,
+        ),
       ),
       bottom: widget.bottom,
     );

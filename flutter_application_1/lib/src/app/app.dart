@@ -12,7 +12,7 @@ class StickerApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'meu app',
-      theme: AppTheme.dark(),
+      theme: AppTheme.light(),
       home: HomePage(loadOnInit: loadHomePacks),
     );
   }
