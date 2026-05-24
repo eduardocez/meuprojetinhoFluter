@@ -2,6 +2,12 @@
 
 A new Flutter project.
 
+## Arquitetura
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the reusable project architecture and folder conventions.
+
+See [PROJECT_BLUEPRINT.md](PROJECT_BLUEPRINT.md) for stack, language/SDK, system design, and reuse checklist.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

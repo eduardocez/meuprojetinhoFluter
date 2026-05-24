@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/module/home/home_screen.dart';
+import 'package:flutter_application_1/src/app/app.dart';
 
 void main() {
-  runApp(const HomeScreen());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const StickerApp());
 }
 
 

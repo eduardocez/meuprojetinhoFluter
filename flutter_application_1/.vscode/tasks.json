@@ -23,6 +23,17 @@
 			"isBackground": true,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "flutter run",
+			"type": "shell",
+			"command": "flutter",
+			"args": [
+				"run"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }
