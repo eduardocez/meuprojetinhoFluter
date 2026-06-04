@@ -1,16 +1,16 @@
 AppDeFigurinhas
 
-Aplicativo Flutter para criar e organizar figurinhas (stickers) com editor de texto simples.
+Aplicativo Flutter para criar e organizar figurinhas (stickers) com editor de texto e crop simples.
 
 Visão geral
 
-Este projeto é um protótipo de aplicativo Flutter que permite criar pacotes de figurinhas, adicionar imagens e editá-las com sobreposição de texto. O app recebeu um redesign "Clean Light" com fontes via google_fonts, além de uma tela de introdução (splash) e um fluxo sequencial de edição de imagens ao adicionar novas figurinhas.
+Este projeto é um protótipo de aplicativo Flutter que permite criar pacotes de figurinhas, adicionar imagens e editá-las com crop ajustável e sobreposição de texto. O app recebeu um redesign "Clean Light" com fontes via google_fonts, além de uma tela de introdução (splash) e um fluxo sequencial de edição de imagens ao adicionar novas figurinhas.
 
 Funcionalidades principais:
 - Tema moderno "Clean Light" (Material 3)
 - Tela de introdução (IntroPage)
 - Fluxo para criar pacotes de figurinhas e adicionar imagens
-- Editor de imagem simples: adicionar texto, arrastar texto sobre a imagem, salvar cópia editada
+- Editor de imagem com crop por formato: ajustar o enquadramento, adicionar texto, arrastar texto sobre a imagem e salvar cópia editada
 - As imagens editadas são salvas em uma pasta local `edited_stickers` dentro do diretório de documentos do app
 
 Estrutura importante
@@ -19,7 +19,7 @@ Estrutura importante
 - `lib/src/app/theme/app_theme.dart` — tema e estilos da aplicação
 - `lib/src/features/onboarding/presentation/intro_page.dart` — tela de introdução
 - `lib/src/features/stickers/presentation/home_page.dart` — tela principal e fluxo de pacotes/figurinhas
-- `lib/src/features/stickers/presentation/editor/sticker_image_editor_page.dart` — editor de imagem (texto sobre imagem)
+- `lib/src/features/stickers/presentation/editor/sticker_image_editor_page.dart` — editor de imagem (crop + texto sobre imagem)
 
 Dependências relevantes
 
@@ -50,8 +50,9 @@ As imagens geradas pelo editor são escritas em tempo de execução no diretóri
 Notas de desenvolvimento
 
 - O editor usa `RepaintBoundary` + `toImage` para capturar a composição atual (imagem + sobreposições) e salvar em PNG.
-- A implementação atual suporta apenas texto como recurso de edição (arrastar, alterar tamanho por slider, mudar cor através de paleta simples).
-- Melhorias futuras sugeridas: seleção de fontes, paleta de cores avançada, inserir texto diretamente sobre a imagem com ações rápidas, redimensionamento por gesto (pinch-to-zoom) e integração com `flutter_launcher_icons` para configurar o ícone do app.
+- A edição agora inclui crop com presets de formato, além do texto arrastável com tamanho e cor configuráveis.
+- A exportação preserva a proporção escolhida e encaixa a imagem final em uma tela quadrada compatível com o fluxo de figurinhas.
+- Melhorias futuras sugeridas: seleção de fontes, paleta de cores avançada, inserir texto diretamente sobre a imagem com ações rápidas e integração com `flutter_launcher_icons` para configurar o ícone do app.
 
 Alterar nome do app e ícone
 

@@ -16,17 +16,21 @@ import '../domain/sticker_pack_info.dart';
 class StickerManager {
   static const Duration _whatsAppOperationTimeout = Duration(seconds: 20);
   static const Duration _whatsAppInstalledPollTimeout = Duration(seconds: 15);
-  static const Duration _whatsAppInstalledPollInterval = Duration(milliseconds: 500);
-  static const MethodChannel _whatsAppRefreshChannel =
-      MethodChannel('whatsapp_stickers_handler/refresh');
-
+  static const Duration _whatsAppInstalledPollInterval = Duration(
+    milliseconds: 500,
+  );
+  static const MethodChannel _whatsAppRefreshChannel = MethodChannel(
+    'whatsapp_stickers_handler/refresh',
+  );
 
   static Future<void> _addOrUpdateAndEnablePack(
     StickerPack pack, {
     required bool installedBefore,
   }) async {
     try {
-      final method = installedBefore ? 'updateStickerPackAndEnable' : 'addStickerPackAndEnable';
+      final method = installedBefore
+          ? 'updateStickerPackAndEnable'
+          : 'addStickerPackAndEnable';
       await _whatsAppRefreshChannel.invokeMethod<void>(method, {
         'identifier': pack.identifier,
         'name': pack.name,
@@ -169,7 +173,9 @@ class StickerManager {
     return stickerFiles;
   }
 
-  static Future<StickerPackInfo> _migrateLegacyFiles(StickerPackInfo pack) async {
+  static Future<StickerPackInfo> _migrateLegacyFiles(
+    StickerPackInfo pack,
+  ) async {
     final legacyStickers = await _listLegacyStickerFiles();
     if (legacyStickers.isEmpty) {
       return pack;
@@ -201,7 +207,9 @@ class StickerManager {
     return updated.copyWith(stickers: movedStickers, needsSync: true);
   }
 
-  static Future<StickerPackInfo> refreshPackFromDisk(StickerPackInfo pack) async {
+  static Future<StickerPackInfo> refreshPackFromDisk(
+    StickerPackInfo pack,
+  ) async {
     var refreshed = pack;
 
     if (refreshed.id.trim().isEmpty) {
@@ -276,7 +284,10 @@ class StickerManager {
     );
   }
 
-  static Future<Uint8List> _compressWebpToLimit(Uint8List pngBytes, {int maxBytes = 100000}) async {
+  static Future<Uint8List> _compressWebpToLimit(
+    Uint8List pngBytes, {
+    int maxBytes = 100000,
+  }) async {
     int quality = 90;
     Uint8List result = await FlutterImageCompress.compressWithList(
       pngBytes,
@@ -294,6 +305,29 @@ class StickerManager {
     }
 
     return result;
+  }
+
+  static img.Image _fitStickerToCanvas(img.Image image, {int size = 512}) {
+    final longestSide = image.width > image.height ? image.width : image.height;
+    if (longestSide <= 0) {
+      return img.Image(width: size, height: size, numChannels: 4);
+    }
+
+    final resized = image.width >= image.height
+        ? img.copyResize(
+            image,
+            width: size,
+            interpolation: img.Interpolation.cubic,
+          )
+        : img.copyResize(
+            image,
+            height: size,
+            interpolation: img.Interpolation.cubic,
+          );
+
+    final canvas = img.Image(width: size, height: size, numChannels: 4);
+    img.compositeImage(canvas, resized, center: true);
+    return canvas;
   }
 
   static Future<Uint8List> _readSourceBytes(String src) async {
@@ -323,7 +357,7 @@ class StickerManager {
         continue;
       }
 
-      final resized = img.copyResizeCropSquare(image, size: 512);
+      final resized = _fitStickerToCanvas(image);
       final png = img.encodePng(resized);
       final webp = await _compressWebpToLimit(Uint8List.fromList(png));
       final filename = 'sticker_$index.webp';
@@ -335,12 +369,16 @@ class StickerManager {
     return stickerFiles;
   }
 
-  static Future<String> saveSticker(Uint8List bytes, String packId, String name) async {
+  static Future<String> saveSticker(
+    Uint8List bytes,
+    String packId,
+    String name,
+  ) async {
     final image = img.decodeImage(bytes);
     if (image == null) {
       throw Exception('Imagem invalida');
     }
-    final resized = img.copyResizeCropSquare(image, size: 512);
+    final resized = _fitStickerToCanvas(image);
     final png = img.encodePng(resized);
 
     final webp = await _compressWebpToLimit(Uint8List.fromList(png));
@@ -373,7 +411,11 @@ class StickerManager {
     return file.path;
   }
 
-  static Future<String> _saveBytesToFile(Uint8List bytes, String packId, String filename) async {
+  static Future<String> _saveBytesToFile(
+    Uint8List bytes,
+    String packId,
+    String filename,
+  ) async {
     final dir = await getApplicationDocumentsDirectory();
     final packDir = Directory('${dir.path}/stickers/$packId');
     if (!await packDir.exists()) {
@@ -413,9 +455,16 @@ class StickerManager {
           'publisher_website': '',
           'privacy_policy_website': '',
           'license_agreement_website': '',
-          'stickers': stickerNames.map((name) => {'image_file': name, 'emojis': ['😀']}).toList()
-        }
-      ]
+          'stickers': stickerNames
+              .map(
+                (name) => {
+                  'image_file': name,
+                  'emojis': ['😀'],
+                },
+              )
+              .toList(),
+        },
+      ],
     };
 
     final metaFile = File('${packDir.path}/contents.json');
@@ -450,7 +499,7 @@ class StickerManager {
         continue;
       }
 
-      final resized = img.copyResizeCropSquare(image, size: 512);
+      final resized = _fitStickerToCanvas(image);
       final png = img.encodePng(resized);
       final webp = await _compressWebpToLimit(Uint8List.fromList(png));
       final filename = 'sticker_$i.webp';
@@ -460,7 +509,11 @@ class StickerManager {
       if (i == 0) {
         final tray = img.copyResizeCropSquare(image, size: 96);
         final trayPng = img.encodePng(tray);
-        final trayPath = await _saveBytesToFile(Uint8List.fromList(trayPng), packId, 'tray.png');
+        final trayPath = await _saveBytesToFile(
+          Uint8List.fromList(trayPng),
+          packId,
+          'tray.png',
+        );
         trayFile = trayPath;
       }
 
@@ -473,7 +526,10 @@ class StickerManager {
     }
 
     // WhatsApp exige no mínimo 3 figurinhas por pack.
-    await _ensureMinimumStickerCount(packId: packId, stickerFiles: stickerFiles);
+    await _ensureMinimumStickerCount(
+      packId: packId,
+      stickerFiles: stickerFiles,
+    );
 
     debugPrint('📦 Criando pack com ${stickerFiles.length} figurinhas');
     debugPrint('🎯 Pack ID: $packId');
@@ -507,10 +563,16 @@ class StickerManager {
         stickers: stickerFiles,
       );
 
-      await handler.addStickerPack(stickerPack).timeout(_whatsAppOperationTimeout);
+      await handler
+          .addStickerPack(stickerPack)
+          .timeout(_whatsAppOperationTimeout);
 
       final confirmed = await _waitForPackInstalled(handler, packId);
-      debugPrint(confirmed ? 'Pacote adicionado ao WhatsApp!' : '⚠️ Não foi possível confirmar instalação no WhatsApp');
+      debugPrint(
+        confirmed
+            ? 'Pacote adicionado ao WhatsApp!'
+            : '⚠️ Não foi possível confirmar instalação no WhatsApp',
+      );
       return StickerPackInfo(
         id: packId,
         name: packName,
@@ -589,8 +651,17 @@ class StickerManager {
     final stickersForPublish = List<String>.from(allStickers);
 
     // WhatsApp exige no mínimo 3 figurinhas por pack.
-    await _ensureMinimumStickerCount(packId: pack.id, stickerFiles: stickersForPublish);
-    await saveMetadata(pack.id, pack.name, 'Publisher', stickersForPublish, trayPath);
+    await _ensureMinimumStickerCount(
+      packId: pack.id,
+      stickerFiles: stickersForPublish,
+    );
+    await saveMetadata(
+      pack.id,
+      pack.name,
+      'Publisher',
+      stickersForPublish,
+      trayPath,
+    );
 
     try {
       final handler = WhatsappStickersHandler();
@@ -627,7 +698,8 @@ class StickerManager {
         await _addOrUpdateAndEnablePack(stickerPack, installedBefore: false);
       }
 
-      final confirmed = installedBefore || await _waitForPackInstalled(handler, pack.id);
+      final confirmed =
+          installedBefore || await _waitForPackInstalled(handler, pack.id);
       return pack.copyWith(
         stickers: stickersForPublish,
         trayPath: trayPath,
@@ -670,14 +742,24 @@ class StickerManager {
       trayPath = await saveTrayIcon(firstStickerBytes, pack.id);
     }
 
-    await saveMetadata(pack.id, pack.name, 'Publisher', pack.stickers, trayPath);
+    await saveMetadata(
+      pack.id,
+      pack.name,
+      'Publisher',
+      pack.stickers,
+      trayPath,
+    );
 
     try {
       final handler = WhatsappStickersHandler();
       final isInstalled = await handler.isWhatsAppInstalled;
       if (!isInstalled) {
         debugPrint('⚠️ WhatsApp não está instalado');
-        return pack.copyWith(trayPath: trayPath, published: false, needsSync: true);
+        return pack.copyWith(
+          trayPath: trayPath,
+          published: false,
+          needsSync: true,
+        );
       }
 
       final stickerPack = StickerPack(
@@ -700,7 +782,8 @@ class StickerManager {
         await _addOrUpdateAndEnablePack(stickerPack, installedBefore: false);
       }
 
-      final confirmed = installedBefore || await _waitForPackInstalled(handler, pack.id);
+      final confirmed =
+          installedBefore || await _waitForPackInstalled(handler, pack.id);
       return pack.copyWith(
         trayPath: trayPath,
         published: confirmed,
